@@ -14,3 +14,15 @@ class PlaceFinder:
         places = self.service.search_places(category, destination)
 
         return places
+
+    def find_multiple_categories(self, destination: str, categories: list):
+        """
+        Fetch multiple place categories
+        """
+
+        results = {}
+
+        for category in categories:
+            results[category] = self.service.search_places(category, destination)
+
+        return results

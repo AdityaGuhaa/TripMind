@@ -22,7 +22,7 @@ class TravelAgent:
         # Gemini client
         self.client = genai.Client(api_key=api_key)
 
-        # Model
+        # Model used
         self.model = "gemini-2.5-flash"
 
         # Tools
@@ -33,18 +33,60 @@ class TravelAgent:
 
         try:
 
-            # -----------------------------
-            # Fetch places
-            # -----------------------------
-            cafes_data = self.place_finder.find_places(destination, "cafes")
-            beaches_data = self.place_finder.find_places(destination, "beaches")
+            # --------------------------------
+            # Interest → Google Places mapping
+            # --------------------------------
+            category_map = {
+                "beaches": "beaches",
+                "cafes": "cafes",
+                "restaurants": "restaurants",
+                "food": "restaurants",
+                "nightlife": "bars",
+                "bars": "bars",
+                "monuments": "tourist attractions",
+                "history": "tourist attractions",
+                "culture": "tourist attractions",
+                "hotels": "hotels",
+                "hostels": "hostels",
+                "nature": "parks"
+            }
 
-            cafes = [place["name"] for place in cafes_data]
-            beaches = [place["name"] for place in beaches_data]
+            categories = []
 
-            # -----------------------------
+            for interest in interests:
+                interest = interest.lower()
+                if interest in category_map:
+                    categories.append(category_map[interest])
+
+            # Always include these useful categories
+            categories.extend([
+                "restaurants",
+                "tourist attractions"
+            ])
+
+            # Remove duplicates
+            categories = list(set(categories))
+
+            # --------------------------------
+            # Fetch places from Google Places
+            # --------------------------------
+            places_data = {}
+
+            for category in categories:
+                places_data[category] = self.place_finder.find_places(
+                    destination,
+                    category
+                )
+
+            # Extract place names for prompt
+            place_summary = {}
+
+            for category, places in places_data.items():
+                place_summary[category] = places
+
+            # --------------------------------
             # Fetch weather
-            # -----------------------------
+            # --------------------------------
             weather_data = self.weather_tool.get_destination_weather(destination)
 
             weather_info = {
@@ -53,9 +95,9 @@ class TravelAgent:
                 "condition": weather_data.get("condition")
             }
 
-            # -----------------------------
-            # Build prompt
-            # -----------------------------
+            # --------------------------------
+            # Build Gemini prompt
+            # --------------------------------
             prompt = f"""
 You are TripMind, an intelligent AI travel planner.
 
@@ -67,18 +109,22 @@ Current weather:
 Temperature: {weather_info["temperature"]}°C
 Condition: {weather_info["condition"]}
 
-Available cafes:
-{cafes}
-
-Available beaches:
-{beaches}
+Available places by category:
+{place_summary}
 
 Instructions:
 
-- Use ONLY the places listed above.
-- If weather suggests rain or storms, avoid beaches.
-- If weather is clear or sunny, prioritize beaches.
-- Balance activities across the trip.
+- ONLY use places listed in "Available places".
+- DO NOT invent or guess locations.
+- Every activity must reference a place from the provided lists.
+- Ensure restaurants and food spots are included for lunch and dinner.
+- Balance beaches, attractions, food, and nightlife.
+
+Example structure:
+
+Morning → beach or attraction  
+Afternoon → restaurant or cafe  
+Evening → bar / nightlife / attraction
 
 Return ONLY valid JSON in this format:
 
@@ -94,14 +140,14 @@ Return ONLY valid JSON in this format:
 }}
 
 Rules:
-- No explanations
-- No markdown
-- No text before or after JSON
+- Do NOT include explanations
+- Do NOT include markdown
+- Do NOT include text before or after JSON
 """
 
-            # -----------------------------
+            # --------------------------------
             # Call Gemini
-            # -----------------------------
+            # --------------------------------
             response = self.client.models.generate_content(
                 model=self.model,
                 contents=prompt
@@ -111,9 +157,9 @@ Rules:
 
             itinerary_json = json.loads(text)
 
-            # -----------------------------
-            # Final response
-            # -----------------------------
+            # --------------------------------
+            # Final API response
+            # --------------------------------
             return {
                 "destination": destination,
                 "weather": weather_info,
