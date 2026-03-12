@@ -49,6 +49,7 @@ Return ONLY valid JSON in this format:
 Do not include explanations.
 Do not include markdown.
 Only return JSON.
+Return valid JSON only. Do not include text before or after JSON.
 """
 
         try:
